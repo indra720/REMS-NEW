@@ -7,7 +7,7 @@ const api = axios.create({
   withCredentials: false,
 });
 
-const publicApi = axios.create({
+export const publicApi = axios.create({
   baseURL: API_BASE_URL,
   withCredentials: false
 });
@@ -77,7 +77,7 @@ export const removeFromWishlist = async (slug: string): Promise<void> => {
 
 export const fetchProperties = async (): Promise<Property[]> => {
   try {
-    const response = await publicApi.get<Property[]>('/properties/');
+    const response = await publicApi.get<Property[]>('/properties/search/');
     // The backend seems to return results in a 'results' object
     return (response.data as any).results || response.data;
   } catch (error) {

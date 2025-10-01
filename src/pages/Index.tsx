@@ -52,6 +52,7 @@ import { Link } from "react-router-dom";
 import { useNavigate } from "react-router-dom";
 import PropertyCard2 from "@/components/ui/PropertyCard2";
 import SearchInterface from "@/components/ui/SearchInterface";
+import { SearchProvider } from "../context/SearchContext";
 import PropertyCategories from "@/components/ui/PropertyCategories";
 import BuyRentSell from "@/components/ui/BuyRentSell";
 import VideoTours from "@/components/ui/VideoTours";
@@ -144,7 +145,7 @@ const Index = () => {
   const fetchPremiumProperties = async () => {
     try {
       const data = await fetchAIProperties();
-      console.log("Premium Properties Data:", data);
+      // console.log("Premium Properties Data:", data);
       setPremiumProperties(data);
     } catch (error) {
       console.error("Failed to fetch premium properties:", error);
@@ -164,7 +165,7 @@ const Index = () => {
   // Function to handle phone calls
   const handleCall = (phoneNumber: string) => {
     window.location.href = `tel:${phoneNumber}`;
-    toast.info(`Initiating Call: Calling ${phoneNumber}...`);
+    // toast.info(`Initiating Call: Calling ${phoneNumber}...`);
   };
 
   // Function to handle WhatsApp
@@ -177,7 +178,7 @@ const Index = () => {
       ""
     )}?text=${encodeURIComponent(message)}`;
     window.open(whatsappUrl, "_blank");
-    toast.info("Redirecting to WhatsApp...");
+    // toast.info("Redirecting to WhatsApp...");
   };
 
   // Function to handle email
@@ -188,7 +189,7 @@ const Index = () => {
     window.location.href = `mailto:${emailAddress}?subject=${encodeURIComponent(
       subject
     )}`;
-    toast.info(`Composing email to ${emailAddress}...`);
+    // toast.info(`Composing email to ${emailAddress}...`);
   };
 
   // Function to handle voice search
@@ -200,12 +201,12 @@ const Index = () => {
       const recognition = new SpeechRecognition();
 
       recognition.onstart = () => {
-        toast.info("Listening... Please speak your search query.");
+        // toast.info("Listening... Please speak your search query.");
       };
 
       recognition.onresult = (event: any) => {
         const transcript = event.results[0][0].transcript;
-        toast.info(`Searching for: "${transcript}"`);
+        // toast.info(`Searching for: "${transcript}"`);
         navigate(`/property-search?q=${encodeURIComponent(transcript)}`);
       };
 
@@ -229,7 +230,7 @@ const Index = () => {
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        toast.info("Processing image for property search...");
+        // toast.info("Processing image for property search...");
         // Here you would typically upload to a service and get search results
         setTimeout(() => {
           toast.success("Found similar properties! Redirecting to results...");
@@ -242,7 +243,7 @@ const Index = () => {
 
   // Function to handle virtual tour
   const handleVirtualTour = () => {
-    toast.info("Redirecting to virtual tour platform...");
+    // toast.info("Redirecting to virtual tour platform...");
     navigate("/book-visit?type=virtual");
   };
 
@@ -276,7 +277,7 @@ const Index = () => {
     const searchParams = new URLSearchParams();
     searchParams.set("filter", filterType);
     navigate(`/property-search?${searchParams.toString()}`);
-    toast.info(`Searching for ${filterType}...`);
+    // toast.info(`Searching for ${filterType}...`);
   };
 
   const featuredProperties: Property[] = [
@@ -508,22 +509,19 @@ const Index = () => {
   const propertiesdata = async () => {
     try {
       const token = localStorage.getItem("access_token");
-      const response = await fetch("http://127.0.0.1:8000/api/properties/", {
+      const response = await fetch("http://127.0.0.1:8000/api/properties/search/", {
         method: "GET",
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
       });
       if (response.ok) {
         const data = await response.json();
-        console.log(data);
+        // console.log(data);
         setpropertydata(data);
         // toast({
         //   title: "fetched data",
         //   description: "data fetched successfully",
         // });
       } else {
-        console.log("data not fetched");
+        // console.log("data not fetched");
       }
     } catch (error) {
       console.log(error);
@@ -567,7 +565,9 @@ const Index = () => {
 
           {/* Search Interface */}
           <div className="w-full max-w-4xl mx-auto pt-8 sm:pt-0 mb-20 px-4">
-            <SearchInterface />
+            <SearchProvider>
+              <SearchInterface />
+            </SearchProvider>
           </div>
         </div>
       </section>

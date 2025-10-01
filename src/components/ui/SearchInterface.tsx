@@ -11,12 +11,9 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "react-router-dom";
-import axios from 'axios';
-import { useSearch } from '../../context/SearchContext';
 
 const SearchInterface = () => {
   const navigate = useNavigate();
-  const { setSearchResults } = useSearch();
   const [activeSearchTab, setActiveSearchTab] = useState("Buy");
   const [searchQuery, setSearchQuery] = useState("");
   const [dropdownValue, setDropdownValue] = useState("all-residential");
@@ -44,41 +41,41 @@ const SearchInterface = () => {
       case "Rent":
         return [
           { value: "all-residential", label: "All Residential" },
-          { value: "apartments", label: "Apartments" },
-          { value: "villas", label: "Villas" },
-          { value: "plots", label: "Plots" },
+          { value: "Apartment", label: "Apartments" },
+          { value: "Villa", label: "Villas" },
+          { value: "Plot", label: "Plots" },
         ];
       case "New Launch":
         return [
           { value: "all-projects", label: "All Projects" },
-          { value: "apartments", label: "Apartment Projects" },
-          { value: "villas", label: "Villa Projects" },
+          { value: "Apartment Projects", label: "Apartment Projects" },
+          { value: "Villa Projects", label: "Villa Projects" },
         ];
       case "Commercial":
         return [
           { value: "all-commercial", label: "All Commercial" },
-          { value: "office", label: "Office Space" },
-          { value: "retail", label: "Retail Space" },
-          { value: "warehouse", label: "Warehouse" },
+          { value: "Office Space", label: "Office Space" },
+          { value: "Retail Space", label: "Retail Space" },
+          { value: "Warehouse", label: "Warehouse" },
         ];
       case "Plots/Land":
         return [
           { value: "all-plots", label: "All Plots/Land" },
-          { value: "residential-plots", label: "Residential Plots" },
-          { value: "commercial-plots", label: "Commercial Plots" },
-          { value: "agricultural", label: "Agricultural Land" },
+          { value: "Residential Plot", label: "Residential Plots" },
+          { value: "Commercial Plot", label: "Commercial Plots" },
+          { value: "Agricultural Land", label: "Agricultural Land" },
         ];
       case "Projects":
         return [
           { value: "all-projects", label: "All Projects" },
-          { value: "ongoing", label: "Ongoing Projects" },
-          { value: "completed", label: "Completed Projects" },
+          { value: "Ongoing Projects", label: "Ongoing Projects" },
+          { value: "Completed Projects", label: "Completed Projects" },
         ];
       case "Post Property":
         return [
           { value: "property-type", label: "Select Property Type" },
-          { value: "residential", label: "Residential" },
-          { value: "commercial", label: "Commercial" },
+          { value: "Residential", label: "Residential" },
+          { value: "Commercial", label: "Commercial" },
         ];
       default:
         return [{ value: "all-residential", label: "All Residential" }];
@@ -109,7 +106,7 @@ const SearchInterface = () => {
   };
 
   // Handle search with navigation
-  const handleSearch = async () => {
+  const handleSearch = () => {
     setLoading(true);
     
     if (activeSearchTab === "Post Property") {
@@ -118,52 +115,53 @@ const SearchInterface = () => {
       if (dropdownValue) searchParams.set('type', dropdownValue);
       navigate(`/post-property?${searchParams.toString()}`);
     } else {
-      const params = new URLSearchParams();
-      if (activeSearchTab) params.append('category', activeSearchTab.toLowerCase());
-      if (searchQuery) params.append('location', searchQuery);
-      // Map dropdownValue to property_type if needed, or pass directly if values match API
-      if (dropdownValue && dropdownValue !== 'all-residential' && dropdownValue !== 'all-projects' && dropdownValue !== 'all-commercial' && dropdownValue !== 'all-plots') {
-        params.append('property_type', dropdownValue);
+      // Create search parameters
+      const searchParams = new URLSearchParams();
+      if (searchQuery) searchParams.set('location', searchQuery);
+      if (activeSearchTab === "Commercial" && dropdownValue && dropdownValue !== 'all-commercial') {
+        searchParams.set('property_status', dropdownValue);
+      } else if (dropdownValue && dropdownValue !== 'all-residential') {
+        searchParams.set('type', dropdownValue);
       }
 
-      try {
-        const response = await axios.get(`http://127.0.0.1:8000/api/properties/search/?${params.toString()}`, {
-          withCredentials: false
-        });
-        setSearchResults(response.data);
-        navigate('/search');
-      } catch (error) {
-        console.error('Error during search:', error);
-        // Optionally show a toast error message
+      let backendCategory = activeSearchTab;
+      if (activeSearchTab === "Buy") {
+        backendCategory = "Sale";
       }
+      // For 'Rent', it's already 'Rent', so no change needed
+
+      if (backendCategory) searchParams.set('category', backendCategory);
+      if (activeSearchTab === "New Launch") searchParams.set('new_launch', 'true');
+      
+      // console.log("SearchInterface: Navigating with URL params:", searchParams.toString());
+      // Navigate to Index2 with search parameters
+      navigate(`/search?${searchParams.toString()}`);
     }
     
     setLoading(false);
   };
 
   // Handle popular search clicks
-  const handlePopularSearch = async (location: string) => {
+  const handlePopularSearch = (location) => {
     setSearchQuery(location);
-    setLoading(true);
-
-    const params = new URLSearchParams();
-    if (activeSearchTab) params.append('category', activeSearchTab.toLowerCase());
-    params.append('location', location);
-    if (dropdownValue && dropdownValue !== 'all-residential' && dropdownValue !== 'all-projects' && dropdownValue !== 'all-commercial' && dropdownValue !== 'all-plots') {
-      params.append('property_type', dropdownValue);
+    const searchParams = new URLSearchParams();
+    searchParams.set('location', location);
+    if (activeSearchTab === "Commercial" && dropdownValue && dropdownValue !== 'all-commercial') {
+      searchParams.set('property_status', dropdownValue);
+    } else if (dropdownValue && dropdownValue !== 'all-residential') {
+      searchParams.set('type', dropdownValue);
     }
 
-    try {
-      const response = await axios.get(`http://127.0.0.1:8000/api/properties/search/?${params.toString()}`, {
-        withCredentials: false
-      });
-      setSearchResults(response.data);
-      navigate('/search');
-    } catch (error) {
-      console.error('Error during popular search:', error);
-      // Optionally show a toast error message
+    let backendCategory = activeSearchTab;
+    if (activeSearchTab === "Buy") {
+      backendCategory = "Sale";
     }
-    setLoading(false);
+    // For 'Rent', it's already 'Rent', so no change needed
+
+    if (backendCategory) searchParams.set('category', backendCategory);
+    if (activeSearchTab === "New Launch") searchParams.set('new_launch', 'true');
+    // console.log("SearchInterface: Navigating with URL params (popular search):", searchParams.toString());
+    navigate(`/search?${searchParams.toString()}`);
   };
 
   return (

@@ -59,19 +59,26 @@ export const Index2 = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { searchResults } = useSearch(); // Use searchResults from context
+  console.log("Index2: searchResults from context:", searchResults);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const searchContainerRef = useRef<HTMLDivElement>(null);
   const [viewMode, setViewMode] = useState("list");
   const [sortBy, setSortBy] = useState("relevance");
 
   // Top bar states
-  const [searchTerm, setSearchTerm] = useState("");
-  const [propertyType, setPropertyType] = useState("all");
+  const urlSearchParams = new URLSearchParams(location.search);
+  const initialSearchTerm = urlSearchParams.get('q') || '';
+  const initialPropertyType = urlSearchParams.get('type') || 'all';
+  const initialSelectedCity = urlSearchParams.get('location') || '';
+  const initialSelectedCategory = urlSearchParams.get('category') || '';
+
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
+  const [propertyType, setPropertyType] = useState(initialPropertyType);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [selectedCity, setSelectedCity] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedCity, setSelectedCity] = useState(initialSelectedCity);
+  const [selectedCategory, setSelectedCategory] = useState(initialSelectedCategory);
 
   // Property states
   const [filteredProperties, setFilteredProperties] = useState<any[]>([]);
@@ -182,70 +189,6 @@ export const Index2 = () => {
   useEffect(() => {
     let filtered = [...searchResults]; // Start with searchResults from context
 
-    // Get search parameters from URL for filtering
-    const searchParams = new URLSearchParams(location.search);
-    const urlSearchQuery = searchParams.get("q");
-    const urlSearchType = searchParams.get("type");
-    const urlSearchTab = searchParams.get("tab");
-
-    // Apply URL-based search filters first
-    if (urlSearchQuery) {
-      const query = urlSearchQuery.toLowerCase();
-      filtered = filtered.filter((p) => {
-        const title = (p.title || "").toLowerCase();
-        const location = (p.location || "").toLowerCase();
-        const description = (p.description || "").toLowerCase();
-        
-        return title.includes(query) || location.includes(query) || description.includes(query);
-      });
-    }
-
-    if (urlSearchTab) {
-      // ... (filtering logic from before)
-    }
-
-    if (urlSearchType && urlSearchType !== "all-residential") {
-      // ... (filtering logic from before)
-    }
-
-    if (selectedCity) {
-      filtered = filtered.filter((p) =>
-        (p.location || "").toLowerCase().includes(selectedCity.toLowerCase())
-      );
-    }
-
-    if (selectedCategory) {
-      const lowercasedCategory = selectedCategory.toLowerCase();
-      const singularCategory = lowercasedCategory.endsWith("s")
-        ? lowercasedCategory.slice(0, -1)
-        : lowercasedCategory;
-      filtered = filtered.filter(
-        (p) =>
-          (p.title || "").toLowerCase().includes(singularCategory) ||
-          (p.description || "").toLowerCase().includes(singularCategory)
-      );
-    }
-
-    // --- Apply Top Bar Filters ---
-    const lowercasedSearchTerm = searchTerm.toLowerCase();
-    if (lowercasedSearchTerm) {
-      filtered = filtered.filter(
-        (p) =>
-          (p.title || "").toLowerCase().includes(lowercasedSearchTerm) ||
-          (p.location || "").toLowerCase().includes(lowercasedSearchTerm)
-      );
-    }
-    if (propertyType && propertyType !== "all") {
-      const lowercasedType = propertyType.toLowerCase();
-      filtered = filtered.filter((p) => {
-        const title = (p.title || "").toLowerCase();
-        const description = (p.description || "").toLowerCase();
-        return (
-          title.includes(lowercasedType) || description.includes(lowercasedType)
-        );
-      });
-    }
-
     // --- Apply Sidebar Filters ---
     if (sidebarFilters) {
       // ... (sidebar filtering logic)
@@ -254,19 +197,16 @@ export const Index2 = () => {
     const sorted = sortProperties(filtered, sortBy);
     setFilteredProperties(sorted);
     setCurrentPage(1);
+    console.log("Index2: filteredProperties after all filters and sort:", sorted);
 
-    if ((searchParams.get("q") || searchParams.get("tab") || searchParams.get("type")) && sorted.length === 0) {
+    if (sorted.length === 0) {
       toast.error("No properties found matching your search criteria. Try different filters.");
     }
   }, [
-    searchResults, // Depend on searchResults instead of properties
-    searchTerm,
-    propertyType,
+    searchResults, // Depend on searchResults from context
     sidebarFilters,
     sortBy,
-    selectedCity,
-    selectedCategory,
-    location.search,
+    location.search, // Depend on location.search to re-trigger when URL changes
   ]);
 
   const sortProperties = (properties: any[], sortType: string) => {
@@ -363,7 +303,7 @@ export const Index2 = () => {
     (currentPage - 1) * propertiesPerPage,
     currentPage * propertiesPerPage
   );
-
+  console.log("Index2: currentProperties for rendering:", currentProperties);
   const renderPagination = () => {
     const pageNumbers = [];
     const maxPagesToShow = 5;

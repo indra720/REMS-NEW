@@ -153,12 +153,12 @@ const AddProperty = () => {
     e?.preventDefault();
 
     if (imageFiles.length === 0) {
-      toast.error("Please upload at least one image");
+      // toast.error("Please upload at least one image");
       return;
     }
 
     if (!formData.ownership_type) {
-      toast.error("Please select an ownership type.");
+      // toast.error("Please select an ownership type.");
       return;
     }
 
@@ -168,7 +168,7 @@ const AddProperty = () => {
     try {
       const token = localStorage.getItem("access_token");
       if (!token) {
-        toast.error("Authentication Error");
+        // toast.error("Authentication Error");
         setIsSubmitting(false);
         return;
       }
@@ -262,7 +262,7 @@ const AddProperty = () => {
 
       setSubmissionMessage("Property published successfully!");
       setSubmissionProgress(100);
-      toast.success("Property created successfully with all media!");
+      // toast.success("Property created successfully with all media!");
       
       setTimeout(() => {
         navigate(`/search`);
@@ -271,14 +271,14 @@ const AddProperty = () => {
     } catch (error: any) {
       console.error("Error creating property:", error);
       if (error.response) {
-        console.error("Error response:", error.response.data);
-        toast.error(
-          `Failed to create property: ${
-            error.response.data.message || "Unknown error"
-          }`
-        );
+        // console.error("Error response:", error.response.data);
+        // toast.error(
+        //   `Failed to create property: ${
+        //     error.response.data.message || "Unknown error"
+        //   }`
+        // );
       } else {
-        toast.error("Failed to create property. Please try again.");
+        // toast.error("Failed to create property. Please try again.");
       }
       setIsSubmitting(false);
     }
@@ -291,20 +291,20 @@ const AddProperty = () => {
         { withCredentials: false }
       );
 
-      console.log("Property Types Response:", response.data);
+      // console.log("Property Types Response:", response.data);
       setPropertyTypes(response.data);
     } catch (error: any) {
-      console.error("Failed to fetch property types:", error);
+      // console.error("Failed to fetch property types:", error);
 
       if (error.response?.status === 401) {
-        toast.error("Session expired. Please login again.");
+        // toast.error("Session expired. Please login again.");
         localStorage.removeItem("access_token");
       } else if (error.response?.status === 403) {
-        toast.error("Access denied. Check permissions.");
+        // toast.error("Access denied. Check permissions.");
       } else if (error.response?.status >= 500) {
-        toast.error("Server error. Please try again later.");
+        // toast.error("Server error. Please try again later.");
       } else {
-        toast.error("Failed to load property types.");
+        // toast.error("Failed to load property types.");
       }
     }
   };

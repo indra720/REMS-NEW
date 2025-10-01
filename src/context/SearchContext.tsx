@@ -1,6 +1,7 @@
 // src/context/SearchContext.tsx
 import { createContext, useState, useContext, ReactNode, useEffect } from 'react';
-import axios from 'axios';
+import { publicApi } from '../lib/api';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 interface Property {
   id: number;
@@ -45,6 +46,9 @@ interface SearchState {
   keyword: string;
   location: string;
   propertyType: string;
+  category: string;
+  newLaunch: boolean;
+  propertyStatus: string;
 }
 
 interface SearchContextType {
@@ -59,28 +63,58 @@ interface SearchContextType {
 const SearchContext = createContext<SearchContextType | undefined>(undefined);
 
 export const SearchProvider = ({ children }: { children: ReactNode }) => {
-  const [searchParams, setSearchParamsState] = useState<SearchState>({
-    keyword: '',
-    location: '',
-    propertyType: '',
-  });
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const getSearchParamsFromUrl = (): SearchState => {
+    // console.log("SearchContext: Raw URL search string:", location.search);
+    const params = new URLSearchParams(location.search);
+    return {
+      keyword: params.get('q') || '',
+      location: params.get('location') || '',
+      propertyType: params.get('type') || '',
+      category: params.get('category') || '',
+      newLaunch: params.get('new_launch') === 'true',
+      propertyStatus: params.get('property_status') || '',
+    };
+  };
+
   const [searchResults, setSearchResults] = useState<Property[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
+  const searchParams = getSearchParamsFromUrl(); // Derive searchParams from URL
+
   const setSearchParams = (params: Partial<SearchState>) => {
-    setSearchParamsState(prev => ({ ...prev, ...params }));
+    const currentParams = new URLSearchParams(location.search);
+    if (params.keyword !== undefined) currentParams.set('q', params.keyword);
+    if (params.location !== undefined) currentParams.set('location', params.location);
+    if (params.propertyType !== undefined) currentParams.set('type', params.propertyType);
+    navigate(`?${currentParams.toString()}`);
   };
 
   const fetchProperties = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get('http://127.0.0.1:8000/api/properties/', {
-        params: searchParams,
+      // console.log("SearchContext: searchParams before mapping to queryParams:", searchParams);
+      const queryParams: any = {};
+      if (searchParams.location) queryParams.location = searchParams.location;
+      if (searchParams.propertyType) queryParams.type = searchParams.propertyType;
+      if (searchParams.category) queryParams.category = searchParams.category;
+      if (searchParams.newLaunch) queryParams.new_launch = 'true';
+      if (searchParams.propertyStatus) queryParams.property_status = searchParams.propertyStatus;
+      // If keyword is present, and location is not already set, use keyword as location
+      if (searchParams.keyword && !queryParams.location) queryParams.location = searchParams.keyword;
+      // console.log("SearchContext: Fetching properties with queryParams:", queryParams);
+
+      const response = await publicApi.get('http://127.0.0.1:8000/api/properties/search/', {
+        params: queryParams,
         withCredentials: false, // Set withCredentials to false to resolve CORS issue
       });
+      // console.log("SearchContext: API response data:", response.data);
       setSearchResults(response.data);
+      // console.log("SearchContext: Updated searchResults:", response.data);
     } catch (err) {
       console.error("Failed to fetch properties:", err);
       setError("Failed to load properties. Please try again later.");
@@ -92,10 +126,10 @@ export const SearchProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     fetchProperties();
-  }, [searchParams]); // Re-fetch whenever searchParams change
+  }, [location.search]); // Re-fetch whenever URL search parameters change
 
   return (
-    <SearchContext.Provider value={{ searchParams, setSearchParams, searchResults, loading, error, fetchProperties }}>
+    <SearchContext.Provider value={{ searchParams, setSearchParams, searchResults, setSearchResults, loading, error, fetchProperties }}>
       {children}
     </SearchContext.Provider>
   );
