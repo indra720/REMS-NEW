@@ -1,0 +1,939 @@
+import { useState, useEffect, useRef } from "react";
+import { Menu, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
+import {
+  Search,
+  Filter,
+  MapPin,
+  Bed,
+  Bath,
+  Square,
+  Heart,
+  Eye,
+  Star,
+  Mic,
+  Plus,
+} from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
+import { FilterSidebar } from "./FilterSidebar";
+import { PropertyCard } from "./PropertyCard";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  getWishlist,
+  addToWishlist,
+  removeFromWishlist,
+  WishlistItem,
+} from "@/lib/api";
+import { jwtDecode } from "jwt-decode";
+
+const propertyTypesForSelect = [
+  { id: "apartment", label: "Apartment" },
+  { id: "villa", label: "Villa" },
+  { id: "plot", label: "Plot" },
+  { id: "commercial", label: "Commercial" },
+];
+
+export const Index2 = () => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [viewMode, setViewMode] = useState("list");
+  const [sortBy, setSortBy] = useState("relevance");
+
+  // Top bar states
+  const [searchTerm, setSearchTerm] = useState("");
+  const [propertyType, setPropertyType] = useState("all");
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [selectedCity, setSelectedCity] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+
+  // Property states
+  const [properties, setProperties] = useState<any[]>([]);
+  const [filteredProperties, setFilteredProperties] = useState<any[]>([]);
+
+  // Sidebar state
+  const [sidebarFilters, setSidebarFilters] = useState<any>(null);
+
+  const [loading, setLoading] = useState(false);
+
+  const [wishlist, setWishlist] = useState<WishlistItem[]>([]);
+  const [wishlistedPropertyIds, setWishlistedPropertyIds] = useState<
+    Set<string>
+  >(new Set());
+
+  const makeAuthenticatedRequest = async (
+    url: string,
+    options: RequestInit = {}
+  ) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) throw new Error("No access token found");
+    const defaultHeaders = {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    };
+    const requestOptions: RequestInit = {
+      method: "GET",
+      ...options,
+      headers: { ...defaultHeaders, ...(options.headers || {}) },
+    };
+    return fetch(url, requestOptions);
+  };
+
+  // Updated fetchProperties with client-side filtering
+  const fetchPropertiesWithSearch = async () => {
+    setLoading(true);
+    
+    // Always use the regular properties API
+    let url = `http://127.0.0.1:8000/api/properties/`;
+    
+    try {
+      const response = await makeAuthenticatedRequest(url);
+      if (response.ok) {
+        const data = await response.json();
+        const propertiesArray = data.results || (Array.isArray(data) ? data : []);
+        setProperties(propertiesArray);
+      } else {
+        setProperties([]);
+      }
+    } catch (error) {
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProperties = async () => {
+    setLoading(true);
+    const url = `http://127.0.0.1:8000/api/properties/`;
+    try {
+      const response = await makeAuthenticatedRequest(url);
+      if (response.ok) {
+        const data = await response.json();
+        const propertiesArray =
+          data.results || (Array.isArray(data) ? data : []);
+        setProperties(propertiesArray);
+      } else {
+        setProperties([]);
+      }
+    } catch (error) {
+      setProperties([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const city = searchParams.get("city");
+    if (city) {
+      setSelectedCity(city);
+    }
+    const category = searchParams.get("category");
+    if (category) {
+      setSelectedCategory(category);
+    }
+  }, [location]);
+
+  useEffect(() => {
+    fetchPropertiesWithSearch();
+  }, [location.search]);
+
+  useEffect(() => {
+    const fetchWishlist = async () => {
+      const token = localStorage.getItem("access_token");
+      if (!token) {
+        return;
+      }
+      try {
+        const wishlistData = await getWishlist();
+        setWishlist(wishlistData);
+        const wishlistedIds = new Set(
+          wishlistData.map((item) => item.property.toString())
+        );
+        setWishlistedPropertyIds(wishlistedIds);
+      } catch (error) {
+        console.error("Failed to fetch wishlist:", error);
+      }
+    };
+
+    fetchWishlist();
+  }, []);
+
+  const handleSidebarFilterChange = (filters: any) => {
+    setSidebarFilters(filters);
+  };
+
+  // Master useEffect for all filtering
+  useEffect(() => {
+    let filtered = [...properties];
+
+    // Get search parameters from URL for filtering
+    const searchParams = new URLSearchParams(location.search);
+    const urlSearchQuery = searchParams.get("q");
+    const urlSearchType = searchParams.get("type");
+    const urlSearchTab = searchParams.get("tab");
+
+    // Apply URL-based search filters first
+    if (urlSearchQuery) {
+      const query = urlSearchQuery.toLowerCase();
+      filtered = filtered.filter((p) => {
+        const title = (p.title || "").toLowerCase();
+        const location = (p.location || "").toLowerCase();
+        const description = (p.description || "").toLowerCase();
+        
+        // Check if query matches location, title, or description
+        return title.includes(query) || location.includes(query) || description.includes(query);
+      });
+    }
+
+    // Apply tab-based filtering
+    if (urlSearchTab) {
+      if (urlSearchTab === 'Rent') {
+        filtered = filtered.filter((p) => {
+          const category = String(p.category || "").toLowerCase();
+          const propertyStatus = String(p.property_status || "").toLowerCase();
+          const title = (p.title || "").toLowerCase();
+          return category === 'rent' || propertyStatus === 'rent' || title.includes('rent');
+        });
+      } else if (urlSearchTab === 'Buy') {
+        filtered = filtered.filter((p) => {
+          const category = String(p.category || "").toLowerCase();
+          const propertyStatus = String(p.property_status || "").toLowerCase();
+          const title = (p.title || "").toLowerCase();
+          return category === 'sale' || propertyStatus === 'sale' || title.includes('sale') || category === 'buy';
+        });
+      } else if (urlSearchTab === 'New Launch') {
+        filtered = filtered.filter((p) => {
+          // Check for new/recent properties
+          const title = (p.title || "").toLowerCase();
+          const description = (p.description || "").toLowerCase();
+          const isNewLaunch = title.includes('new') || title.includes('launch') || description.includes('new launch');
+          
+          // Also check listing date if available
+          if (p.listed_on || p.created_at) {
+            const listingDate = new Date(p.listed_on || p.created_at);
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            return isNewLaunch || listingDate >= thirtyDaysAgo;
+          }
+          
+          return isNewLaunch;
+        });
+      } else if (urlSearchTab === 'Commercial') {
+        filtered = filtered.filter((p) => {
+          const title = (p.title || "").toLowerCase();
+          const propertyType = String(p.property_type || "").toLowerCase();
+          const category = String(p.category || "").toLowerCase();
+          return title.includes('commercial') || propertyType.includes('commercial') || category === 'commercial';
+        });
+      } else if (urlSearchTab === 'Plots/Land') {
+        filtered = filtered.filter((p) => {
+          const title = (p.title || "").toLowerCase();
+          const propertyType = String(p.property_type || "").toLowerCase();
+          return title.includes('plot') || title.includes('land') || propertyType.includes('plot') || propertyType.includes('land');
+        });
+      }
+    }
+
+    // Apply type-based filtering
+    if (urlSearchType && urlSearchType !== "all-residential") {
+      const type = urlSearchType.toLowerCase();
+      filtered = filtered.filter((p) => {
+        const title = (p.title || "").toLowerCase();
+        const propertyType = String(p.property_type || "").toLowerCase();
+        const description = (p.description || "").toLowerCase();
+        
+        // Map search types to property matches
+        if (type === 'apartments' || type === 'apartment') {
+          return title.includes('apartment') || title.includes('flat') || propertyType.includes('apartment');
+        } else if (type === 'villas' || type === 'villa') {
+          return title.includes('villa') || title.includes('bungalow') || propertyType.includes('villa');
+        } else if (type === 'plots' || type === 'plot') {
+          return title.includes('plot') || title.includes('land') || propertyType.includes('plot');
+        } else if (type === 'office') {
+          return title.includes('office') || propertyType.includes('office') || title.includes('commercial');
+        } else if (type === 'retail') {
+          return title.includes('retail') || title.includes('shop') || propertyType.includes('retail');
+        }
+        
+        // Fallback: check if type is mentioned anywhere
+        return title.includes(type) || propertyType.includes(type) || description.includes(type);
+      });
+    }
+
+    if (selectedCity) {
+      filtered = filtered.filter((p) =>
+        (p.location || "").toLowerCase().includes(selectedCity.toLowerCase())
+      );
+    }
+
+    if (selectedCategory) {
+      const lowercasedCategory = selectedCategory.toLowerCase();
+      const singularCategory = lowercasedCategory.endsWith("s")
+        ? lowercasedCategory.slice(0, -1)
+        : lowercasedCategory;
+      filtered = filtered.filter(
+        (p) =>
+          (p.title || "").toLowerCase().includes(singularCategory) ||
+          (p.description || "").toLowerCase().includes(singularCategory)
+      );
+    }
+
+    // --- Apply Top Bar Filters ---
+    const lowercasedSearchTerm = searchTerm.toLowerCase();
+    if (lowercasedSearchTerm) {
+      filtered = filtered.filter(
+        (p) =>
+          (p.title || "").toLowerCase().includes(lowercasedSearchTerm) ||
+          (p.location || "").toLowerCase().includes(lowercasedSearchTerm)
+      );
+    }
+    if (propertyType && propertyType !== "all") {
+      const lowercasedType = propertyType.toLowerCase();
+      filtered = filtered.filter((p) => {
+        const title = (p.title || "").toLowerCase();
+        const description = (p.description || "").toLowerCase();
+        return (
+          title.includes(lowercasedType) || description.includes(lowercasedType)
+        );
+      });
+    }
+
+    // --- Apply Sidebar Filters ---
+    if (sidebarFilters) {
+      if (sidebarFilters.searchQuery) {
+        const query = sidebarFilters.searchQuery.toLowerCase();
+        filtered = filtered.filter((p) =>
+          Object.values(p).some(
+            (val) => val && val.toString().toLowerCase().includes(query)
+          )
+        );
+      }
+      if (sidebarFilters.locations) {
+        const lowercasedLocation = sidebarFilters.locations.toLowerCase();
+        filtered = filtered.filter((p) => {
+          const propLocation = p.location;
+          return (
+            propLocation &&
+            propLocation.toLowerCase() === lowercasedLocation
+          );
+        });
+      }
+      if (sidebarFilters.propertyType) {
+        const lowercasedType = sidebarFilters.propertyType.toLowerCase();
+        filtered = filtered.filter((p) => {
+          const title = (p.title || "").toLowerCase();
+          const description = (p.description || "").toLowerCase();
+          return (
+            title.includes(lowercasedType) ||
+            description.includes(lowercasedType)
+          );
+        });
+      }
+      if (sidebarFilters.bhk) {
+        filtered = filtered.filter((p) => {
+          const bedrooms = p.bedrooms;
+          if (bedrooms === undefined || bedrooms === null) return false;
+          if (sidebarFilters.bhk === "4+") {
+            return parseInt(bedrooms, 10) >= 4;
+          }
+          return bedrooms.toString() === sidebarFilters.bhk;
+        });
+      }
+      if (sidebarFilters.priceRange) {
+        const [min, max] = sidebarFilters.priceRange;
+        if (min !== 10 || max !== 1000) {
+          const minPrice = min * 100000;
+          const maxPrice = max * 100000;
+          filtered = filtered.filter((p) => {
+            const price = parseFloat(p.price);
+            return !isNaN(price) && price >= minPrice && price <= maxPrice;
+          });
+        }
+      }
+      if (
+        sidebarFilters.possessionStatus &&
+        sidebarFilters.possessionStatus.length > 0
+      ) {
+        const lowercasedStatus = sidebarFilters.possessionStatus.map(
+          (s: string) => s.toLowerCase()
+        );
+        filtered = filtered.filter((p) => {
+          const status = p.availability_status;
+          return status && lowercasedStatus.includes(status.toLowerCase());
+        });
+      }
+      if (sidebarFilters.amenities && sidebarFilters.amenities.length > 0) {
+        const lowercasedAmenities = sidebarFilters.amenities.map((a: string) =>
+          a.toLowerCase()
+        );
+        filtered = filtered.filter((p) => {
+          const propAmenities = p.amenities;
+          if (!propAmenities || !Array.isArray(propAmenities)) return false;
+          const propertyAmenities = propAmenities.map((a) =>
+            a.amenity.toString().toLowerCase()
+          );
+          if (propertyAmenities.length === 0) return false;
+          return lowercasedAmenities.every((fa: string) =>
+            propertyAmenities.includes(fa)
+          );
+        });
+      }
+    }
+
+    const sorted = sortProperties(filtered, sortBy);
+    setFilteredProperties(sorted);
+    setCurrentPage(1);
+
+    // Show toast if no results found for search
+    const searchParams = new URLSearchParams(location.search);
+    if ((searchParams.get("q") || searchParams.get("tab") || searchParams.get("type")) && sorted.length === 0) {
+      toast.error("No properties found matching your search criteria. Try different filters.");
+    }
+  }, [
+    properties,
+    searchTerm,
+    propertyType,
+    sidebarFilters,
+    sortBy,
+    selectedCity,
+    selectedCategory,
+    location.search,
+  ]);
+
+  const sortProperties = (properties, sortType) => {
+    const sorted = [...properties];
+    switch (sortType) {
+      case "price-low":
+        return sorted.sort((a, b) => parseFloat(a.price) - parseFloat(b.price));
+      case "price-high":
+        return sorted.sort((a, b) => parseFloat(b.price) - parseFloat(a.price));
+      case "newest":
+        return sorted.sort(
+          (a, b) =>
+            new Date(b.listed_on).getTime() - new Date(a.listed_on).getTime()
+        );
+      default:
+        return sorted.sort(
+          (a, b) =>
+            (b.ai_recommended_score || 0) - (a.ai_recommended_score || 0)
+        );
+    }
+  };
+
+  const handleSortChange = (value) => {
+    setSortBy(value);
+  };
+
+  // This useEffect generates suggestions as the user types.
+  useEffect(() => {
+    if (searchTerm.length > 1) {
+      const lowercasedSearchTerm = searchTerm.toLowerCase();
+      const suggestionSet = new Set<string>();
+
+      properties.forEach((property) => {
+        if (property.title?.toLowerCase().includes(lowercasedSearchTerm)) {
+          suggestionSet.add(property.title);
+        }
+        if (property.location?.toLowerCase().includes(lowercasedSearchTerm)) {
+          suggestionSet.add(property.location);
+        }
+        if (property.builder?.toLowerCase().includes(lowercasedSearchTerm)) {
+          suggestionSet.add(property.builder);
+        }
+      });
+
+      setSuggestions(Array.from(suggestionSet).slice(0, 5)); // Limit to 5 suggestions
+      setIsSuggestionsOpen(true);
+    } else {
+      setSuggestions([]);
+      setIsSuggestionsOpen(false);
+    }
+  }, [searchTerm, properties]);
+
+  const handleSuggestionClick = (suggestion: string) => {
+    setSearchTerm(suggestion);
+    setIsSuggestionsOpen(false);
+  };
+
+  const handleSearchKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter") {
+      setIsSuggestionsOpen(false);
+    }
+  };
+
+  const handleClearAndRefetch = () => {
+    setSearchTerm("");
+    setPropertyType("all");
+    setSidebarFilters(null);
+  };
+
+  // Close suggestions when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        searchContainerRef.current &&
+        !searchContainerRef.current.contains(event.target as Node)
+      ) {
+        setIsSuggestionsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Pagination Logic
+  const [currentPage, setCurrentPage] = useState(1);
+  const propertiesPerPage = 6;
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 500, behavior: "smooth" });
+  };
+
+  const totalPages = Math.ceil(filteredProperties.length / propertiesPerPage);
+  const currentProperties = filteredProperties.slice(
+    (currentPage - 1) * propertiesPerPage,
+    currentPage * propertiesPerPage
+  );
+
+  const renderPagination = () => {
+    const pageNumbers = [];
+    const maxPagesToShow = 5;
+    const halfMaxPages = Math.floor(maxPagesToShow / 2);
+    let startPage = Math.max(1, currentPage - halfMaxPages);
+    let endPage = Math.min(totalPages, startPage + maxPagesToShow - 1);
+
+    if (endPage - startPage < maxPagesToShow - 1) {
+      startPage = Math.max(1, endPage - maxPagesToShow + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pageNumbers.push(
+        <PaginationItem key={i}>
+          <PaginationLink
+            href="#"
+            isActive={i === currentPage}
+            onClick={(e) => {
+              e.preventDefault();
+              handlePageChange(i);
+            }}
+          >
+            {i}
+          </PaginationLink>
+        </PaginationItem>
+      );
+    }
+    return pageNumbers;
+  };
+
+  const handleWishlistToggle = async (property: any) => {
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      toast.error("You must be logged in to manage your wishlist.");
+      navigate("/login");
+      return;
+    }
+
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    if (!user || !user.id) {
+      toast.error("User information not found. Please log in again.");
+      navigate("/login");
+      return;
+    }
+
+    const propertyId = property.id.toString();
+    const isWishlisted = wishlistedPropertyIds.has(propertyId);
+
+    try {
+      if (isWishlisted) {
+        const wishlistItem = wishlist.find(
+          (item) => item.property.toString() === propertyId
+        );
+        if (wishlistItem) {
+          await removeFromWishlist(wishlistItem.slug);
+          toast.success("Removed from wishlist!");
+          setWishlistedPropertyIds((prev) => {
+            const newSet = new Set(prev);
+            newSet.delete(propertyId);
+            return newSet;
+          });
+        }
+      } else {
+        await addToWishlist(property.id, user.id);
+        toast.success("Added to wishlist!");
+        setWishlistedPropertyIds((prev) => new Set(prev).add(propertyId));
+      }
+      // Refresh wishlist from backend
+      const updatedWishlist = await getWishlist();
+      setWishlist(updatedWishlist);
+      const updatedIds = new Set(
+        updatedWishlist.map((item) => item.property.toString())
+      );
+      setWishlistedPropertyIds(updatedIds);
+    } catch (error) {
+      console.error("Failed to update wishlist:", error);
+      toast.error("Failed to update wishlist. Please try again.");
+    }
+  };
+
+  return (
+    <div>
+      {/* hero-gradient */}
+      <div className="bg-gradient-to-r from-[#7f23cf] to-accent py-16">
+        <div className="relative z-10 max-w-7xl mx-auto px-6">
+          <div className="text-center text-white mb-12">
+            <h1 className="text-5xl font-bold mb-4">
+              Find Your Dream Property
+            </h1>
+            <p className="text-xl opacity-90">
+              Discover the perfect home with our AI-powered search
+            </p>
+          </div>
+
+          <Card className="backdrop-blur-xl border-white/20 max-w-4xl mx-auto bg-white/10">
+            <CardContent className="p-6">
+              <div className="flex flex-col lg:flex-row gap-4">
+                <div className="flex-1 relative" ref={searchContainerRef}>
+                  <Search className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by location, keyword..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    onFocus={() => setIsSuggestionsOpen(true)}
+                    onKeyPress={handleSearchKeyPress}
+                    className="pl-10 bg-white/90 text-lg py-6"
+                    autoComplete="off"
+                  />
+                  {isSuggestionsOpen && suggestions.length > 0 && (
+                    <Card className="absolute top-full mt-2 w-full z-50 shadow-lg bg-white">
+                      <CardContent className="p-2">
+                        {suggestions.map((s, index) => (
+                          <div
+                            key={index}
+                            className="p-2 hover:bg-muted rounded-md cursor-pointer"
+                            onClick={() => handleSuggestionClick(s)}
+                          >
+                            {s}
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+                <Select value={propertyType} onValueChange={setPropertyType}>
+                  <SelectTrigger className="lg:w-48 bg-white/90">
+                    <SelectValue placeholder="Select Property Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Property Types</SelectItem>
+                    {propertyTypesForSelect.map((type) => (
+                      <SelectItem key={type.id} value={type.label}>
+                        {type.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  className="lg:w-32 py-6 bg-purple-600  hover:bg-purple-700 text-white"
+                  size="lg"
+                  onClick={() => setIsSuggestionsOpen(false)} // Just close suggestions
+                  disabled={loading}
+                >
+                  Search
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      <div className="min-h-screen bg-gradient-surface">
+        <header className="bg-background/95 backdrop-blur-sm border-b border-border/50 sticky top-0 z-50 shadow-soft">
+          <div className="container mx-auto px-4 py-4">
+            {/* ... header content ... */}
+          </div>
+        </header>
+
+        <div className="container mx-auto px-4 py-6">
+          <div className="flex gap-6">
+            <aside className="hidden lg:block w-80 flex-shrink-0 sticky top-24 h-fit">
+              <FilterSidebar
+                onFilterChange={handleSidebarFilterChange}
+                properties={properties}
+              />
+            </aside>
+
+            <main className="flex-1 space-y-8">
+              <div>
+                <div className="flex flex-col md:flex-row justify-between md:items-center gap-4 mb-6">
+                  <div className="text-center md:text-left">
+                    <h2 className="text-2xl font-bold">Search Results</h2>
+                    <p className="text-muted-foreground">
+                      {loading
+                        ? "Loading..."
+                        : `${filteredProperties.length} properties found`}
+                    </p>
+                  </div>
+
+                  <div className="flex flex-col gap-2 md:flex-row md:items-center">
+                    {/* Mobile Row 1 */}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        onClick={() => navigate("/add-property")}
+                        className="bg-purple-600 hover:bg-purple-700 text-white"
+                      >
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add<span className="hidden sm:inline"> Property</span>
+                      </Button>
+                      <Select value={sortBy} onValueChange={handleSortChange}>
+                        <SelectTrigger className="w-[180px] flex justify-start gap-1">
+                          <SelectValue placeholder="Sort by" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="relevance">Relevance</SelectItem>
+                          <SelectItem value="price-low">
+                            Price: Low to High
+                          </SelectItem>
+                          <SelectItem value="price-high">
+                            Price: High to Low
+                          </SelectItem>
+                          <SelectItem value="newest">Newest First</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {/* Mobile Row 2 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="lg:hidden">
+                        <Sheet
+                          open={sidebarOpen}
+                          onOpenChange={setSidebarOpen}
+                        >
+                          <SheetTrigger asChild>
+                            <Button variant="outline" className="w-full">
+                              <Filter className="h-4 w-4 mr-2" />
+                              Filters
+                            </Button>
+                          </SheetTrigger>
+                          <SheetContent className="w-full max-w-xs p-0 overflow-y-auto z-[101] pt-16">
+                            <FilterSidebar
+                              onFilterChange={(filters) => {
+                                handleSidebarFilterChange(filters);
+                              }}
+                              properties={properties}
+                              className="border-none shadow-none h-auto"
+                            />
+                          </SheetContent>
+                        </Sheet>
+                      </div>
+                      <div className="grid grid-cols-2 w-full border rounded-lg">
+                        <Button
+                          className={
+                            `w-full rounded-r-none ` +
+                            (viewMode === "grid"
+                              ? "bg-purple-600 text-white"
+                              : "bg-transparent text-foreground")
+                          }
+                          size="sm"
+                          onClick={() => setViewMode("grid")}
+                        >
+                          Grid
+                        </Button>
+                        <Button
+                          className={
+                            `w-full rounded-l-none ` +
+                            (viewMode === "list"
+                              ? "bg-purple-600 text-white"
+                              : "bg-transparent text-foreground")
+                          }
+                          size="sm"
+                          onClick={() => setViewMode("list")}
+                        >
+                          List
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {loading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto"></div>
+                    <p className="mt-4 text-muted-foreground">
+                      Loading properties...
+                    </p>
+                  </div>
+                ) : (
+                  <div
+                    className={`grid gap-6   ${
+                      viewMode === "grid"
+                        ? "grid-cols-1 md:grid-cols-2 xl:grid-cols-3"
+                        : "grid-cols-1"
+                    }`}
+                  >
+                    {currentProperties.length > 0 ? (
+                      currentProperties.map((property) => (
+                        <PropertyCard
+                          key={property.id}
+                          layout={viewMode} // Keep this from your local changes
+                          id={property.id.toString()}
+                          slug={property.slug}
+                          image={
+                            property.images?.find((img: any) => img.is_primary)
+                              ?.image ||
+                            property.images?.[0]?.image ||
+                            ""
+                          }
+                          title={property.title || property.name}
+                          builder={property.builder || "N/A"}
+                          location={property.location || property.address}
+                          bhkOptions={property.bhkOptions || []}
+                          description={property.description}
+                          badges={property.badges || []}
+                          ribbon={property.ribbon || ""}
+                          bedrooms={property.bedrooms}
+                          bathrooms={property.bathrooms}
+                          price={property.price}
+                          rating={
+                            property.ai_recommended_score
+                              ? parseFloat(
+                          // New props for category and date
+                          category={property.category}
+                          property_status={property.property_status}
+                          listed_on={property.listed_on}
+                          created_at={property.created_at}
+                                  (property.ai_recommended_score * 5).toFixed(1)
+                                )
+                              : undefined
+                          }
+                          amenities={property.amenities || []}
+                          isWishlisted={wishlistedPropertyIds.has(
+                            property.id.toString()
+                          )}
+                          onWishlistToggle={() =>
+                            handleWishlistToggle(property)
+                          }
+                        />
+                      ))
+                    ) : (
+                      <div className="text-center py-8">
+                        <p className="text-muted-foreground">
+                          No properties found matching your criteria.
+                        </p>
+                        <Button
+                          variant="outline"
+                          onClick={handleClearAndRefetch}
+                          className="mt-4"
+                        >
+                          Clear Filters
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {totalPages > 1 && (
+                <div className="flex justify-center mt-8">
+                  <Pagination>
+                    {/* Mobile View */}
+                    <div className="md:hidden">
+                      <PaginationContent className="flex flex-col items-center gap-2">
+                        <div className="flex flex-row items-center gap-1">
+                          {renderPagination()}
+                        </div>
+                        <div className="flex flex-row items-center gap-2">
+                          <PaginationItem>
+                            <PaginationPrevious
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePageChange(
+                                  Math.max(1, currentPage - 1)
+                                );
+                              }}
+                            />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationNext
+                              href="#"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                handlePageChange(
+                                  Math.min(totalPages, currentPage + 1)
+                                );
+                              }}
+                            />
+                          </PaginationItem>
+                        </div>
+                      </PaginationContent>
+                    </div>
+                    {/* Desktop View */}
+                    <div className="hidden md:flex">
+                      <PaginationContent className="flex flex-row items-center gap-2">
+                        <PaginationItem>
+                          <PaginationPrevious
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(
+                                Math.max(1, currentPage - 1)
+                              );
+                            }}
+                          />
+                        </PaginationItem>
+                        {renderPagination()}
+                        <PaginationItem>
+                          <PaginationNext
+                            href="#"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handlePageChange(
+                                Math.min(totalPages, currentPage + 1)
+                              );
+                            }}
+                          />
+                        </PaginationItem>
+                      </PaginationContent>
+                    </div>
+                  </Pagination>
+                </div>
+              )}
+            </main>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
